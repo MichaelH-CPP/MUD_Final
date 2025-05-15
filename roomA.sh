@@ -1,0 +1,24 @@
+#!/bin/bash
+
+rows=3
+cols=5
+declare -a matrix
+
+i=0
+j=0
+matrix[$((i*cols+j))]="S_Woah it's dark in here"
+i=1
+j=0
+matrix[$((i*cols+j))]="W_Nothing here, we should keep looking"
+i=2
+j=0
+matrix[$((i*cols+j))]="W_It's just cold and empty here"
+i=1
+j=1
+matrix[$((i*cols+j))]="W_Nothing of use here, better keep looking"
+i=2
+j=1
+matrix[$((i*cols+j))]="W_Another empty stone chamber"
+i=2
+j=2
+matrix[$((i*cols+j))]=

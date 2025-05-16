@@ -1,7 +1,7 @@
 #!/bin/bash
 
-rows=5
-cols=3
+rows=3
+cols=5
 declare -a matrix
 
 i=0

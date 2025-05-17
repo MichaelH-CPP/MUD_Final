@@ -6,45 +6,70 @@ rows=5
 cols=3
 declare -a matrix
 
+#row 1
 i=0
-j=1
-matrix[$((i*cols+j))]="S_You awaken in a strange stone chamber"
+j=0
+matrix[$((i*cols+j))]="S_You're' in a strange stone chamber"
 
-i=0
+i=1
 j=0
 matrix[$((i*cols+j))]="W_Damp walls and silence surround you"
 
-i=0
-j=2
+i=2
+j=0
 matrix[$((i*cols+j))]="W_A faint breeze passes through"
-
-i=1
-j=1
-matrix[$((i*cols+j))]="W_Something scurried past your feet"
-
-i=1
-j=2
-matrix[$((i*cols+j))]="W_Dust covers the old floor"
-
-i=2
-j=1
-matrix[$((i*cols+j))]="W_No signs of life here"
-
-i=2
-j=2
-matrix[$((i*cols+j))]="I_You found the glowing artifact!"
 
 i=3
 j=0
+matrix[$((i*cols+j))]="W_Something scurried past your feet"
+
+i=4
+j=0
+matrix[$((i*cols+j))]="W_Dust covers the old floor"
+
+#row 2
+i=0
+j=1
+matrix[$((i*cols+j))]="W_No signs of life here"
+
+i=1
+j=1
+matrix[$((i*cols+j))]="I_You found the glowing artifact!"
+
+i=2
+j=1
 matrix[$((i*cols+j))]="W_Just cracked stone and silence"
+
+i=3
+j=1
+matrix[$((i*cols+j))]="W_The walls seem to close in slightly"
+
+i=4
+j=1
+matrix[$((i*cols+j))]="C_A chilling whisper echoes around you..."
+
+#row 3
+
+i=0
+j=2
+matrix[$((i*cols+j))]="W_The walls seem to close in slightly"
+
+i=1
+j=2
+matrix[$((i*cols+j))]="W_The walls seem to close in slightly"
+
+i=2
+j=2
+matrix[$((i*cols+j))]="W_The walls seem to close in slightly"
 
 i=3
 j=2
 matrix[$((i*cols+j))]="W_The walls seem to close in slightly"
 
 i=4
-j=1
-matrix[$((i*cols+j))]="C_A chilling whisper echoes around you..."
+j=2
+matrix[$((i*cols+j))]="W_The walls seem to close in slightly"
+
 
 mosquitto_pub -h "$broker" -t "mudClient" -m "$rows"
 mosquitto_pub -h "$broker" -t "mudClient" -m "$cols"

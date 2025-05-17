@@ -62,7 +62,7 @@ j=4
 matrix[$((i*cols+j))]="W_That is a wall"
 
 mosquitto_pub -h "$broker" -t "mudClient" -m "$rows"
-mosquitto_pub -h "$broker" -t "mudClient" 0m "$cols"
+mosquitto_pub -h "$broker" -t "mudClient" -m "$cols"
 
 for ((i=0; i<rows; i++)); do
   for ((j=0; j<cols; j++)); do

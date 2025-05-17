@@ -12,7 +12,7 @@ j=0
 matrix[$((i*cols+j))]="S_It's really cold over here"
 i=1
 j=0
-matrix[$((i*cols+j))]="R_Damn this is a lot of walking"
+matrix[$((i*cols+j))]="R_Just more walking..."
 i=2
 j=0
 matrix[$((i*cols+j))]="R_Almost tripped, that's embarrising"
@@ -26,7 +26,7 @@ j=1
 matrix[$((i*cols+j))]="W_Path is blocked this way"
 i=2
 j=1
-matrix[$((i*cols+j))]="R_Seems like this might be the right way"
+matrix[$((i*cols+j))]="R_Hopefully this is the right way"
 
 #third row
 i=0
@@ -45,7 +45,7 @@ j=3
 matrix[$((i*cols+j))]="R_Feels like you've been here before"
 i=1
 j=3
-matrix[$((i*cols+j))]="R_Seems like something passed through here"
+matrix[$((i*cols+j))]="R_Seems like something else passed through here"
 i=2
 j=3
 matrix[$((i*cols+j))]="R_This room is very still"
@@ -53,7 +53,7 @@ matrix[$((i*cols+j))]="R_This room is very still"
 #fifth row
 i=0
 j=4
-matrix[$((i*cols+j))]="R_This room seems different then the others"
+matrix[$((i*cols+j))]="R_Darkness fills the room"
 i=1
 j=4
 matrix[$((i*cols+j))]="W_There isn't a door that way"
@@ -64,7 +64,7 @@ matrix[$((i*cols+j))]="I_You found the glowing artifact!"
 #sixth row
 i=0
 j=5
-matrix[$((i*cols+j))]="C_This seems way different than the other rooms"
+matrix[$((i*cols+j))]="C_This seems different than the other rooms"
 i=1
 j=5
 matrix[$((i*cols+j))]="W_That is a wall"

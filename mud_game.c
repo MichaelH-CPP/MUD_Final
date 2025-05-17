@@ -55,14 +55,13 @@ void callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_mes
     memcpy(nextString, (char *)msg->payload, len); // No strncpy quirks
     nextString[len] = '\0';                        // Direct null-termination
 
-    printf("Received: [%s] '%s'\n", msg->topic, nextString);
+    // printf("Received: [%s] '%s'\n", msg->topic, nextString);
     atomic_store(&input, true);
 }
 
 void waitForInput()
 {
-    printf("Started input\n"); // Add newline
-    fflush(stdout);            // Force flush
+    fflush(stdout); // Force flush
 
     int rc;
     do
@@ -70,7 +69,6 @@ void waitForInput()
         rc = mosquitto_loop(mosq, 1000, 1); // Timeout after 1 second
     } while (!atomic_load(&input) && rc == MOSQ_ERR_SUCCESS);
 
-    printf("Finished Input\n");
     atomic_store(&input, false);
 }
 /*
@@ -108,9 +106,7 @@ void free_map(bool delete)
 void set_map(char command[MAX_STR_LEN])
 {
     char full_command[256];
-    printf("set_map function");
     snprintf(full_command, sizeof(full_command), "./%s.sh %s", command, mqtt_server);
-    printf(full_command);
     system(full_command);
 
     free_map(false);
@@ -134,7 +130,6 @@ void set_map(char command[MAX_STR_LEN])
         }
     }
 }
-
 void shuffle_maps(char **arr)
 {
     for (int i = 3; i > 0; i--)
@@ -161,7 +156,7 @@ void move(int *currMap)
 {
     waitForInput();
     // West
-    if (strcmp(nextString, "west") == 0)
+    if (strcmp(nextString, "east") == 0)
     {
         if ((currCol + 1) == cols)
         {
@@ -181,18 +176,18 @@ void move(int *currMap)
         }
         else
         {
-            publish_response("Wall in the way, cannot go West.");
+            publish_response(map[currRow][currCol + 1] + 2);
         }
     }
 
     // East
-    else if (strcmp(nextString, "east") == 0)
+    else if (strcmp(nextString, "west") == 0)
     {
         if (currCol == 0)
         {
             if (currRow != 0 || (*currMap - 1) < 0)
             {
-                publish_response("Wall in the way, cannot go East");
+                publish_response("Wall in the way, cannot go West");
             }
             else
             {
@@ -207,7 +202,7 @@ void move(int *currMap)
         }
         else
         {
-            publish_response("Wall in the way, cannot go East.");
+            publish_response(map[currRow][currCol - 1] + 2);
         }
     }
 
@@ -216,7 +211,7 @@ void move(int *currMap)
     {
         if (currRow == 0 || tolower(map[currRow - 1][currCol][0]) == 'w')
         {
-            publish_response("Wall in the way, cannot go North");
+            publish_response(map[currRow - 1][currCol] + 2);
         }
         else
         {
@@ -229,7 +224,7 @@ void move(int *currMap)
     {
         if ((currRow + 1) == rows || tolower(map[currRow + 1][currCol][0]) == 'w')
         {
-            publish_response("Wall in the way, cannot go South");
+            publish_response(map[currRow + 1][currCol] + 2);
         }
         else
         {
@@ -246,6 +241,7 @@ void game()
 
     while (true)
     {
+
         char space[MAX_STR_LEN];
         strcpy(space, map[currRow][currCol]);
         if (tolower(space[0]) == 'i')
@@ -290,6 +286,7 @@ int main(int argc, char *argv[])
     mosquitto_subscribe(mosq, NULL, TOPIC_SUB, 0);
 
     publish_response("connected");
+    srand(time(NULL));
 
     // Display Prompt then Start Game
     char menu[MAX_STR_LEN] = "Welcome! Press any button to start.";

@@ -286,7 +286,7 @@ void move(int *currMap)
     {
         if (currRow == 0 || tolower(map[currRow - 1][currCol][0]) == 'w')
         {
-            publish_response(map[currRow - 1][currCol] + 2);
+            publish_response("Wall in the way, cannot go North");
         }
         else
         {
@@ -299,7 +299,7 @@ void move(int *currMap)
     {
         if ((currRow + 1) == rows || tolower(map[currRow + 1][currCol][0]) == 'w')
         {
-            publish_response(map[currRow + 1][currCol] + 2);
+            publish_response("Wall in the way, cannot go South");
         }
         else
         {

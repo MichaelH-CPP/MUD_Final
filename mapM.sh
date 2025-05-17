@@ -1,5 +1,7 @@
 #!/bin/bash
 
+broker=$1
+
 rows=3
 cols=6
 declare -a matrix
@@ -69,3 +71,13 @@ matrix[$((i*cols+j))]="W_That is a wall"
 i=2
 j=5
 matrix[$((i*cols+j))]="W_Path is blocked this way"
+
+mosquitto_pub -h "$broker" -t "mudClient" -m "$rows"
+mosquitto_pub -h "$broker" -t "mudClient" -m "$cols"
+
+for ((i = 0; i < rows; i++)); do
+    for ((j = 0; j < cols; j++)); do
+        msg="${matrix[$((i*cols+j))]}"
+        mosquitto_pub -h "$broker" -t "mudClient" -m "$msg"
+    done
+done

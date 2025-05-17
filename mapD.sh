@@ -43,3 +43,13 @@ matrix[$((i*cols+j))]="W_The walls seem to close in slightly"
 i=4
 j=1
 matrix[$((i*cols+j))]="C_A chilling whisper echoes around you..."
+
+mosquitto_pub -h "$broker" -t "mudClient" -m "$rows"
+mosquitto_pub -h "$broker" -t "mudClient" -m "$cols"
+
+for ((i=0; i<rows; i++)); do
+  for ((j=0; j<cols; j++)); do
+    msg="${matrix[$((i*cols+j))]}"
+    mosquitto_pub -h "$broker" -t "mudClient" -m "$msg"
+  done
+done

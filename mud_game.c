@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/select.h>
 #include <mosquitto.h>
+#include <stdatomic.h>
 
 // Define Mosquitto Variables
 #define PORT 1883
@@ -18,14 +19,14 @@ char mqtt_server[20];
 
 // Define Global Variables
 #define MAX_STR_LEN 100
-char *maps[4] = {"mapA", "mapA", "mapM", "mapT"};
+char *maps[4] = {"mapA", "mapD", "mapM", "mapT"};
 char ***map = NULL;
 int rows = 0, cols = 0;
 int currRow = 0, currCol = 0;
 
 // Define Input Variables (for callbacks)
 char nextString[MAX_STR_LEN];
-bool input = false;
+atomic_bool input = ATOMIC_VAR_INIT(false);
 
 /*
     [Mosquitto Functions]
@@ -34,22 +35,43 @@ void publish_response(const char *message)
 {
     mosquitto_publish(mosq, NULL, TOPIC_PUB, strlen(message) + 1, message, 0, false);
 }
+
 void callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *msg)
 {
-    printf("Received on [%s]: %.*s\n", msg->topic, msg->payloadlen, (char *)msg->payload);
+    // Always initialize first byte
     nextString[0] = '\0';
-    size_t len = msg->payloadlen < MAX_STR_LEN - 1 ? msg->payloadlen : MAX_STR_LEN - 1;
-    strncpy(nextString, (char *)msg->payload, len);
-    nextString[MAX_STR_LEN - 1] = '\0'; // Explicit null-termination
+
+    // 1. Handle NULL payload case
+    if (!msg || !msg->payload)
+    {
+        input = true; // Still trigger processing
+        return;
+    }
+
+    // 2. Simplified safe copy
+    size_t max_copy = MAX_STR_LEN - 1;
+    size_t len = msg->payloadlen < max_copy ? msg->payloadlen : max_copy;
+
+    memcpy(nextString, (char *)msg->payload, len); // No strncpy quirks
+    nextString[len] = '\0';                        // Direct null-termination
+
+    printf("Received: [%s] '%s'\n", msg->topic, nextString);
+    atomic_store(&input, true);
 }
+
 void waitForInput()
 {
-    int rc = mosquitto_loop(mosq, -1, 1);
-    while (!input && rc == MOSQ_ERR_SUCCESS)
+    printf("Started input\n"); // Add newline
+    fflush(stdout);            // Force flush
+
+    int rc;
+    do
     {
-        rc = mosquitto_loop(mosq, -1, 1);
-    }
-    input = false;
+        rc = mosquitto_loop(mosq, 1000, 1); // Timeout after 1 second
+    } while (!atomic_load(&input) && rc == MOSQ_ERR_SUCCESS);
+
+    printf("Finished Input\n");
+    atomic_store(&input, false);
 }
 /*
   [Map Functions]
@@ -112,15 +134,16 @@ void set_map(char command[MAX_STR_LEN])
         }
     }
 }
+
 void shuffle_maps(char **arr)
 {
     for (int i = 3; i > 0; i--)
     {
         int j = rand() % (i + 1);
-        char temp[20];
-        strcpy(temp, arr[i]);
-        strcpy(arr[i], arr[j]);
-        strcpy(arr[j], temp);
+        // Swap pointers, not string data
+        char *temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
     }
 }
 

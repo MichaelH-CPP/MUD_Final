@@ -8,7 +8,7 @@
 #include <sys/select.h>
 #include <mosquitto.h>
 #include <stdatomic.h>
-
+#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -355,7 +355,7 @@ int main(int argc, char *argv[])
     int rc = mosquitto_connect(mosq, mqtt_server, PORT, KEEPALIVE);
     if (rc != 0)
     {
-        fprintf(stderr, "Unable to connect to broker. Error Code: %d\n", rc);
+        fprintf(stderr, "Unable to connect to broker. Error Code: %d (%s)\n", rc, strerror(errno));
         return 1;
     }
     mosquitto_subscribe(mosq, NULL, TOPIC_SUB, 0);

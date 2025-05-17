@@ -59,3 +59,13 @@ matrix[$((i*cols+j))]="I_You found the glowing artifact!"
 i=3
 j=3
 matrix[$((i*cols+j))]="W_The path is blocked that way"
+
+mosquitto_pub -h "$broker" -t "mudClient" -m "$rows"
+mosquitto_pub -h "$broker" -t "mudClient" -m "$cols"
+
+for ((i=0; i<rows; i++)); do
+  for ((j=0; j<cols; j++)); do
+    msg="${matrix[$((i*cols+j))]}"
+    mosquitto_pub -h "$broker" -t "mudClient" -m "$msg"
+  done
+done

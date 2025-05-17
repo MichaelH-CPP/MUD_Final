@@ -1,5 +1,7 @@
 #!/bin/bash
 
+broker=$1
+
 rows=5
 cols=3
 declare -a matrix

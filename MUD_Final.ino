@@ -67,7 +67,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print(topic);
   Serial.print("] ");
 
-  char message[50];
+  char message[100];
   for (int i = 0; i < length; i++) {
     message[i] = (char)payload[i];
   }
@@ -101,42 +101,44 @@ void lcd_print(const char* str) {
   }
 
   // Case 3: Vertical scrolling (>32 chars)
-  char line1[17] = {0}; // Buffer for row 0 (16 chars + null)
-  char line2[17] = {0}; // Buffer for row 1 (16 chars + null)
-  int pos = 0;          // Current position in string
+    else {
+      char line1[17] = {0};
+      char line2[17] = {0};
+      int pos = 0;
 
-  strncpy(line1, str, 16);
-  strncpy(line2, str + 16, 16);
-  lcd.setCursor(0, 0); 
-  lcd.print(line1);
-  lcd.setCursor(0, 1); 
-  lcd.print(line2);
-  delay(1000);
+      // Print the first 2 lines
+      strncpy(line1, str, 16);
+      strncpy(line2, str + 16, 16);
+      lcd.setCursor(0, 0); 
+      lcd.print(line1);
+      lcd.setCursor(0, 1); 
+      lcd.print(line2);
+      delay(1000);
 
-  // Scroll vertically for remaining characters
-  for (pos = 32; pos < length; pos += 16) {
-    // Move line2 up to line1
-    strncpy(line1, line2, 16);
-    
-    // Fill line2 with next 16 chars (or remaining chars)
-    int remaining = length - pos;
-    int copy_len = (remaining >= 16) ? 16 : remaining;
-    strncpy(line2, str + pos, copy_len);
-    
-    // Pad with spaces if needed
-    if (copy_len < 16) {
-      memset(line2 + copy_len, ' ', 16 - copy_len);
+      // Scroll vertically for remaining characters
+      for (pos = 32; pos < length; pos += 16) {
+        // Move line2 up to line1
+        strncpy(line1, line2, 16);
+        
+        // Fill line2 with next 16 chars (or remaining chars)
+        int remaining = length - pos;
+        int copy_len = (remaining >= 16) ? 16 : remaining;
+        strncpy(line2, str + pos, copy_len);
+        
+        // Pad with spaces if needed
+        if (copy_len < 16) {
+          memset(line2 + copy_len, ' ', 16 - copy_len);
+        }
+
+        // Update display
+        lcd.setCursor(0, 0); 
+        lcd.print(line1);
+        lcd.setCursor(0, 1); 
+        lcd.print(line2);
+        delay(1000); // Adjust scroll speed
     }
-
-    // Update display
-    lcd.setCursor(0, 0); 
-    lcd.print(line1);
-    lcd.setCursor(0, 1); 
-    lcd.print(line2);
-    delay(1000); // Adjust scroll speed
   }
 }
-
 void setup() {
   // Set up the LCD
   Wire.begin(SDA, SCL);  // attach the IIC pin
@@ -154,12 +156,11 @@ void setup() {
   client.setCallback(callback);
   srand(time(NULL));
 }
+
 void loop() {
   if(!client.connected()) {
     reconnect();
   }
-
-  // Display Menu on LCD
   client.loop();
   
 }

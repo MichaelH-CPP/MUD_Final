@@ -1,4 +1,8 @@
+#define _DEFAULT_SOURCE
+#define _XOPEN_SOURCE 700
+
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -8,6 +12,11 @@
 #include <sys/select.h>
 #include <mosquitto.h>
 #include <stdatomic.h>
+
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <signal.h>
+#include <syslog.h>
 
 // Define Mosquitto Variables
 #define PORT 1883
@@ -28,6 +37,61 @@ int currRow = 0, currCol = 0;
 char nextString[MAX_STR_LEN];
 atomic_bool input = ATOMIC_VAR_INIT(false);
 
+// Add these daemon-specific defines
+#define PID_FILE "/var/run/mud_daemon.pid"
+#define LOG_IDENT "mud_daemon"
+volatile sig_atomic_t running = 1;
+
+/*
+    [Daemon Functions]
+*/
+void daemonize()
+{
+    pid_t pid = fork();
+
+    if (pid < 0)
+    {
+        syslog(LOG_ERR, "Failed to fork");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid > 0)
+        exit(EXIT_SUCCESS); // Parent exits
+
+    if (setsid() < 0)
+    {
+        syslog(LOG_ERR, "Failed to create session");
+        exit(EXIT_FAILURE);
+    }
+
+    umask(0);
+    chdir("/");
+
+    // Close standard descriptors
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+}
+void cleanup()
+{
+    remove(PID_FILE);
+    closelog();
+}
+void signal_handler(int sig)
+{
+    switch (sig)
+    {
+    case SIGTERM:
+        syslog(LOG_INFO, "Received shutdown signal");
+        running = 0; // Signal main loop to exit
+        break;
+    case SIGHUP:
+        syslog(LOG_INFO, "Reloading configuration");
+        // Add reload logic if needed
+        break;
+    }
+}
+
 /*
     [Mosquitto Functions]
 */
@@ -35,30 +99,27 @@ void publish_response(const char *message)
 {
     mosquitto_publish(mosq, NULL, TOPIC_PUB, strlen(message) + 1, message, 0, false);
 }
-
 void callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *msg)
 {
-    // Always initialize first byte
+    (void)mosq;
+    (void)userdata;
+
     nextString[0] = '\0';
 
-    // 1. Handle NULL payload case
     if (!msg || !msg->payload)
     {
-        input = true; // Still trigger processing
+        input = true;
         return;
     }
 
-    // 2. Simplified safe copy
     size_t max_copy = MAX_STR_LEN - 1;
-    size_t len = msg->payloadlen < max_copy ? msg->payloadlen : max_copy;
+    size_t len = (size_t)msg->payloadlen < max_copy ? (size_t)msg->payloadlen : max_copy;
 
-    memcpy(nextString, (char *)msg->payload, len); // No strncpy quirks
-    nextString[len] = '\0';                        // Direct null-termination
+    memcpy(nextString, (char *)msg->payload, len);
+    nextString[len] = '\0';
 
-    // printf("Received: [%s] '%s'\n", msg->topic, nextString);
     atomic_store(&input, true);
 }
-
 void waitForInput()
 {
     fflush(stdout); // Force flush
@@ -71,6 +132,7 @@ void waitForInput()
 
     atomic_store(&input, false);
 }
+
 /*
   [Map Functions]
   void set_map():
@@ -265,16 +327,44 @@ void game()
 
     free_map(true);
 }
-
 int main(int argc, char *argv[])
 {
+    daemonize();
+
+    // PID file handling
+    FILE *pidfile = fopen(PID_FILE, "w");
+    if (!pidfile)
+    {
+        syslog(LOG_ERR, "Could not create PID file: %m");
+        exit(EXIT_FAILURE);
+    }
+    fprintf(pidfile, "%d\n", getpid());
+    fclose(pidfile);
+
+    // Signal handling
+    signal(SIGTERM, signal_handler);
+    signal(SIGHUP, signal_handler);
+
+    // Syslog setup
+    openlog(LOG_IDENT, LOG_PID, LOG_DAEMON);
+    syslog(LOG_INFO, "Daemon started");
+
+    // Your original main() code with printf replaced by syslog
+    if (argc < 2)
+    {
+        syslog(LOG_ERR, "Usage: %s <mqtt-server>", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
     strcpy(mqtt_server, argv[1]);
     mosquitto_lib_init();
+
+    // ... rest of your original main() code ...
     mosq = mosquitto_new(NULL, true, NULL);
 
     if (!mosq)
     {
-        fprintf(stderr, "Failed to create Mosquitto instance\n");
+        syslog(LOG_ERR, "Failed to create Mosquitto instance\n");
         return 1;
     }
 
@@ -282,8 +372,19 @@ int main(int argc, char *argv[])
     int rc = mosquitto_connect(mosq, mqtt_server, PORT, KEEPALIVE);
     if (rc != 0)
     {
-        fprintf(stderr, "Unable to connect to broker. Error Code: %d\n", rc);
+        syslog(LOG_ERR, "Unable to connect to broker. Error Code: %d\n", rc);
         return 1;
+    }
+
+    if (getuid() == 0)
+    {
+        if (setgid(994) != 0 || setuid(999) != 0)
+        {
+            syslog(LOG_ERR, "Failed to drop privileges");
+            cleanup();
+            exit(EXIT_FAILURE);
+        }
+        syslog(LOG_INFO, "Dropped privileges to UID %d/GID %d", 999, 994);
     }
 
     mosquitto_subscribe(mosq, NULL, TOPIC_SUB, 0);
@@ -295,9 +396,19 @@ int main(int argc, char *argv[])
     char menu[MAX_STR_LEN] = "Welcome! Press any button to start.";
     publish_response(menu);
     waitForInput();
-    game();
 
+    // Daemon main loop
+    syslog(LOG_INFO, "Running as UID: %d, GID: %d", getuid(), getgid());
+    while (running)
+    {
+        game();
+        sleep(1);
+    }
+    // Cleanup after loop exits
+    syslog(LOG_INFO, "Performing final cleanup");
+    cleanup();
     mosquitto_destroy(mosq);
     mosquitto_lib_cleanup();
+    remove(PID_FILE);
     return 0;
 }

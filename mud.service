@@ -1,0 +1,14 @@
+[Unit]
+Description=MUD Game Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=muduser
+Group=mudgroup
+ExecStart=/usr/local/bin/mud_daemon 127.0.0.1  # Use your MQTT server IP
+Restart=on-failure
+PIDFile=/var/run/mud_daemon.pid
+
+[Install]
+WantedBy=multi-user.target

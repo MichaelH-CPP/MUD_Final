@@ -12,13 +12,13 @@
 #define PORT 1883
 #define KEEPALIVE 15
 #define TOPIC_SUB "mudClient"
-#define TOPIC_PUB "espClient"
+#define TOPIC_PUB "espRequest"
 struct mosquitto *mosq = NULL;
 char mqtt_server[20];
 
 // Define Global Variables
 #define MAX_STR_LEN 100
-char *maps[4] = {"mapA", "mapD", "mapM", "mapT"};
+char *maps[4] = {"mapA", "mapA", "mapM", "mapT"};
 char ***map = NULL;
 int rows = 0, cols = 0;
 int currRow = 0, currCol = 0;
@@ -38,14 +38,16 @@ void callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_mes
 {
     printf("Received on [%s]: %.*s\n", msg->topic, msg->payloadlen, (char *)msg->payload);
     nextString[0] = '\0';
-    strcpy(nextString, (char *)msg->payload);
-    input = true;
+    size_t len = msg->payloadlen < MAX_STR_LEN - 1 ? msg->payloadlen : MAX_STR_LEN - 1;
+    strncpy(nextString, (char *)msg->payload, len);
+    nextString[MAX_STR_LEN - 1] = '\0'; // Explicit null-termination
 }
 void waitForInput()
 {
-    while (!input)
+    int rc = mosquitto_loop(mosq, -1, 1);
+    while (!input && rc == MOSQ_ERR_SUCCESS)
     {
-        ;
+        rc = mosquitto_loop(mosq, -1, 1);
     }
     input = false;
 }
@@ -84,7 +86,9 @@ void free_map(bool delete)
 void set_map(char command[MAX_STR_LEN])
 {
     char full_command[256];
+    printf("set_map function");
     snprintf(full_command, sizeof(full_command), "./%s.sh %s", command, mqtt_server);
+    printf(full_command);
     system(full_command);
 
     free_map(false);
@@ -98,14 +102,13 @@ void set_map(char command[MAX_STR_LEN])
 
     // Allocate new space
     map = malloc(rows * sizeof(char *));
-    for (int r = 0; r < 3; r++)
+    for (int r = 0; r < rows; r++)
     {
-        map[r] = malloc(3 * sizeof(char *)); // 3 cols per row
-        for (int c = 0; c < 3; c++)
+        map[r] = malloc(cols * sizeof(char *));
+        for (int c = 0; c < cols; c++)
         {
-            // Allocate space for each string (e.g., "R-room 1")
             waitForInput();
-            strcpy(map[r][c], nextString);
+            map[r][c] = strdup(nextString);
         }
     }
 }
@@ -142,7 +145,6 @@ void move(int *currMap)
             if (currRow != 0 || (*currMap + 1) >= 4)
             {
                 publish_response("Wall in the way, cannot go East");
-                sleep(1500);
             }
             else
             {
@@ -157,7 +159,6 @@ void move(int *currMap)
         else
         {
             publish_response("Wall in the way, cannot go West.");
-            sleep(1500);
         }
     }
 
@@ -209,9 +210,10 @@ void move(int *currMap)
         }
         else
         {
-            currRow--;
+            currRow++;
         }
     }
+    usleep(1500 * 1000);
 }
 void game()
 {
@@ -233,8 +235,14 @@ void game()
             move(&currMap);
         }
     }
-    publish_response("You found the item! Great Job!");
-    sleep(1000);
+    if (strlen(map[currRow][currCol]) >= 2)
+    {
+        publish_response(map[currRow][currCol] + 2);
+    }
+    else
+    {
+        publish_response(map[currRow][currCol]);
+    }
 }
 int main(int argc, char *argv[])
 {
@@ -259,7 +267,6 @@ int main(int argc, char *argv[])
     mosquitto_subscribe(mosq, NULL, TOPIC_SUB, 0);
 
     publish_response("connected");
-    srand(time(NULL));
 
     // Display Prompt then Start Game
     char menu[MAX_STR_LEN] = "Welcome! Press any button to start.";

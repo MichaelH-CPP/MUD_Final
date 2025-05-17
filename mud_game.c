@@ -7,12 +7,13 @@
 #include <fcntl.h>
 #include <sys/select.h>
 #include <mosquitto.h>
+#include <stdatomic.h>
 
 // Define Mosquitto Variables
 #define PORT 1883
 #define KEEPALIVE 15
 #define TOPIC_SUB "mudClient"
-#define TOPIC_PUB "espClient"
+#define TOPIC_PUB "espRequest"
 struct mosquitto *mosq = NULL;
 char mqtt_server[20];
 
@@ -25,7 +26,7 @@ int currRow = 0, currCol = 0;
 
 // Define Input Variables (for callbacks)
 char nextString[MAX_STR_LEN];
-bool input = false;
+atomic_bool input = ATOMIC_VAR_INIT(false);
 
 /*
     [Mosquitto Functions]
@@ -34,20 +35,43 @@ void publish_response(const char *message)
 {
     mosquitto_publish(mosq, NULL, TOPIC_PUB, strlen(message) + 1, message, 0, false);
 }
+
 void callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_message *msg)
 {
-    printf("Received on [%s]: %.*s\n", msg->topic, msg->payloadlen, (char *)msg->payload);
+    // Always initialize first byte
     nextString[0] = '\0';
-    strcpy(nextString, (char *)msg->payload);
-    input = true;
+
+    // 1. Handle NULL payload case
+    if (!msg || !msg->payload)
+    {
+        input = true; // Still trigger processing
+        return;
+    }
+
+    // 2. Simplified safe copy
+    size_t max_copy = MAX_STR_LEN - 1;
+    size_t len = msg->payloadlen < max_copy ? msg->payloadlen : max_copy;
+
+    memcpy(nextString, (char *)msg->payload, len); // No strncpy quirks
+    nextString[len] = '\0';                        // Direct null-termination
+
+    printf("Received: [%s] '%s'\n", msg->topic, nextString);
+    atomic_store(&input, true);
 }
+
 void waitForInput()
 {
-    while (!input)
+    printf("Started input\n"); // Add newline
+    fflush(stdout);            // Force flush
+
+    int rc;
+    do
     {
-        ;
-    }
-    input = false;
+        rc = mosquitto_loop(mosq, 1000, 1); // Timeout after 1 second
+    } while (!atomic_load(&input) && rc == MOSQ_ERR_SUCCESS);
+
+    printf("Finished Input\n");
+    atomic_store(&input, false);
 }
 /*
   [Map Functions]
@@ -84,7 +108,9 @@ void free_map(bool delete)
 void set_map(char command[MAX_STR_LEN])
 {
     char full_command[256];
+    printf("set_map function");
     snprintf(full_command, sizeof(full_command), "./%s.sh %s", command, mqtt_server);
+    printf(full_command);
     system(full_command);
 
     free_map(false);
@@ -98,26 +124,26 @@ void set_map(char command[MAX_STR_LEN])
 
     // Allocate new space
     map = malloc(rows * sizeof(char *));
-    for (int r = 0; r < 3; r++)
+    for (int r = 0; r < rows; r++)
     {
-        map[r] = malloc(3 * sizeof(char *)); // 3 cols per row
-        for (int c = 0; c < 3; c++)
+        map[r] = malloc(cols * sizeof(char *));
+        for (int c = 0; c < cols; c++)
         {
-            // Allocate space for each string (e.g., "R-room 1")
             waitForInput();
-            strcpy(map[r][c], nextString);
+            map[r][c] = strdup(nextString);
         }
     }
 }
+
 void shuffle_maps(char **arr)
 {
     for (int i = 3; i > 0; i--)
     {
         int j = rand() % (i + 1);
-        char temp[20];
-        strcpy(temp, arr[i]);
-        strcpy(arr[i], arr[j]);
-        strcpy(arr[j], temp);
+        // Swap pointers, not string data
+        char *temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
     }
 }
 
@@ -142,7 +168,6 @@ void move(int *currMap)
             if (currRow != 0 || (*currMap + 1) >= 4)
             {
                 publish_response("Wall in the way, cannot go East");
-                sleep(1500);
             }
             else
             {
@@ -157,7 +182,6 @@ void move(int *currMap)
         else
         {
             publish_response("Wall in the way, cannot go West.");
-            sleep(1500);
         }
     }
 
@@ -209,9 +233,10 @@ void move(int *currMap)
         }
         else
         {
-            currRow--;
+            currRow++;
         }
     }
+    usleep(1500 * 1000);
 }
 void game()
 {
@@ -233,8 +258,14 @@ void game()
             move(&currMap);
         }
     }
-    publish_response("You found the item! Great Job!");
-    sleep(1000);
+    if (strlen(map[currRow][currCol]) >= 2)
+    {
+        publish_response(map[currRow][currCol] + 2);
+    }
+    else
+    {
+        publish_response(map[currRow][currCol]);
+    }
 }
 int main(int argc, char *argv[])
 {
@@ -259,7 +290,6 @@ int main(int argc, char *argv[])
     mosquitto_subscribe(mosq, NULL, TOPIC_SUB, 0);
 
     publish_response("connected");
-    srand(time(NULL));
 
     // Display Prompt then Start Game
     char menu[MAX_STR_LEN] = "Welcome! Press any button to start.";

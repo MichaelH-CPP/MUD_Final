@@ -2,14 +2,14 @@
 
 broker=$1
 
-rows=3
-cols=5
+rows=5
+cols=3
 declare -a matrix
 
 #row 1
 i=0
 j=0
-matrix[$((i*cols+j))]="S_You're' in a strange stone chamber"
+matrix[$((i*cols+j))]="S_You're in a strange stone chamber"
 
 i=1
 j=0
@@ -30,7 +30,7 @@ matrix[$((i*cols+j))]="I_You found the glowing artifact!"
 #row 2
 i=0
 j=1
-matrix[$((i*cols+j))]="W_There isn's a door that way"
+matrix[$((i*cols+j))]="W_There isn't a door that way"
 
 i=1
 j=1

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+broker=$1
+
 rows=3
 cols=5
 declare -a matrix
@@ -21,7 +23,7 @@ j=1
 matrix[$((i*cols+j))]="W_That is a wall"
 i=1
 j=1
-matrix[$((i*cols+j))]="R_Nothing of use here, better keep looking"\
+matrix[$((i*cols+j))]="R_Nothing of use here, better keep looking"
 i=2
 j=1
 matrix[$((i*cols+j))]="R_There isn't a door that way"
@@ -58,3 +60,13 @@ matrix[$((i*cols+j))]="W_There isn't a door that way"
 i=2
 j=4
 matrix[$((i*cols+j))]="W_That is a wall"
+
+mosquitto_pub -h "$broker" -t "mudClient" -m "$rows"
+mosquitto_pub -h "$broker" -t "mudClient" -m "$cols"
+
+for ((i=0; i<rows; i++)); do
+  for ((j=0; j<cols; j++)); do
+    msg="${matrix[$((i*cols+j))]}"
+    mosquitto_pub -h "$broker" -t "mudClient" -m "$msg"
+  done
+done

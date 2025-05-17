@@ -16,7 +16,7 @@
 
 // Define Mosquitto Variables
 #define PORT 1883
-#define KEEPALIVE 15
+#define KEEPALIVE 60
 #define TOPIC_SUB "mudClient"
 #define TOPIC_PUB "espRequest"
 struct mosquitto *mosq = NULL;

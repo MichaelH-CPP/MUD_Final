@@ -9,6 +9,11 @@
 #include <mosquitto.h>
 #include <stdatomic.h>
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+
 // Define Mosquitto Variables
 #define PORT 1883
 #define KEEPALIVE 15
@@ -24,9 +29,51 @@ char ***map = NULL;
 int rows = 0, cols = 0;
 int currRow = 0, currCol = 0;
 
+// Define Socket Variables
+#define SOCKET_PORT 8080
+#define MAX_CLIENTS 5
+int socket_fd;
+atomic_bool socket_input = ATOMIC_VAR_INIT(false);
+char socket_buffer[MAX_STR_LEN];
+
 // Define Input Variables (for callbacks)
 char nextString[MAX_STR_LEN];
 atomic_bool input = ATOMIC_VAR_INIT(false);
+
+/*
+    [Socket Functions]
+*/
+void *socket_handler(void *arg)
+{
+    struct sockaddr_in client_addr;
+    int addrlen = sizeof(client_addr);
+
+    while (1)
+    {
+        int new_socket = accept(socket_fd, (struct sockaddr *)&client_addr, (socklen_t *)&addrlen);
+        if (new_socket < 0)
+        {
+            perror("accept");
+            continue;
+        }
+
+        // Read data from socket
+        int valread = read(new_socket, socket_buffer, MAX_STR_LEN);
+        if (valread > 0)
+        {
+            socket_buffer[valread] = '\0';
+            printf("Received from socket: %s\n", socket_buffer);
+
+            // Pass to game logic
+            strncpy(nextString, socket_buffer, MAX_STR_LEN);
+            atomic_store(&input, true);
+            atomic_store(&socket_input, true);
+        }
+
+        close(new_socket);
+    }
+    return NULL;
+}
 
 /*
     [Mosquitto Functions]
@@ -61,15 +108,43 @@ void callback(struct mosquitto *mosq, void *userdata, const struct mosquitto_mes
 
 void waitForInput()
 {
-    fflush(stdout); // Force flush
+    fflush(stdout);
 
-    int rc;
-    do
+    fd_set readfds;
+    struct timeval tv;
+    int mosq_fd = mosquitto_socket(mosq);
+
+    while (1)
     {
-        rc = mosquitto_loop(mosq, 1000, 1); // Timeout after 1 second
-    } while (!atomic_load(&input) && rc == MOSQ_ERR_SUCCESS);
+        FD_ZERO(&readfds);
+        FD_SET(mosq_fd, &readfds);
+        FD_SET(socket_fd, &readfds); // Added socket to select()
 
-    atomic_store(&input, false);
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+
+        int activity = select(FD_SETSIZE, &readfds, NULL, NULL, &tv);
+
+        if (activity < 0)
+        {
+            perror("select error");
+            continue;
+        }
+
+        // Handle MQTT
+        if (FD_ISSET(mosq_fd, &readfds))
+        {
+            mosquitto_loop_read(mosq, 1);
+        }
+
+        // Handle Socket input
+        if (atomic_load(&input) || atomic_load(&socket_input))
+        {
+            atomic_store(&input, false);
+            atomic_store(&socket_input, false);
+            return;
+        }
+    }
 }
 /*
   [Map Functions]
@@ -271,13 +346,11 @@ int main(int argc, char *argv[])
     strcpy(mqtt_server, argv[1]);
     mosquitto_lib_init();
     mosq = mosquitto_new(NULL, true, NULL);
-
     if (!mosq)
     {
         fprintf(stderr, "Failed to create Mosquitto instance\n");
         return 1;
     }
-
     mosquitto_message_callback_set(mosq, callback);
     int rc = mosquitto_connect(mosq, mqtt_server, PORT, KEEPALIVE);
     if (rc != 0)
@@ -285,8 +358,44 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Unable to connect to broker. Error Code: %d\n", rc);
         return 1;
     }
-
     mosquitto_subscribe(mosq, NULL, TOPIC_SUB, 0);
+
+    // Socket Functions
+    struct sockaddr_in address;
+    int opt = 1;
+
+    if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+    {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        perror("setsockopt(SO_REUSEADDR)");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(SOCKET_PORT);
+
+    if (bind(socket_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+    {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(socket_fd, MAX_CLIENTS) < 0)
+    {
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Socket server listening on port %d\n", SOCKET_PORT);
+
+    pthread_t socket_thread;
+    pthread_create(&socket_thread, NULL, socket_handler, NULL);
 
     publish_response("connected");
     srand(time(NULL));

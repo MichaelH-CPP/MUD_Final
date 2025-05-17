@@ -5,21 +5,24 @@
 #include <Wire.h>
 #include <string.h>
 
-
-
-// WiFi and MQTT Broker Initiated
-const char* ssid = "";
-const char* password = "";
-const char* mqtt_server = "";
+// WiFi, Socket, and MQTT Broker Initiated
+const char* ssid = "Nhawara";
+const char* password = "8182077618";
+const char* mqtt_server = "34.94.123.84";
+const char* socket_server = "34.94.123.84";
+const int socket_port = 8080;
 
 // Initialize the Clients
 WiFiClient espClient;
-PubSubClient client(espClient);
+PubSubClient mqttClient(espClient);
+WiFiClient socketClient;
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // Define the LCD Values
 #define SDA 14  //Define SDA pins
 #define SCL 13  //Define SCL pins
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+const int buttonPins[4] = {12, 14, 27, 26};
+const char* directions[4] = {"north", "east", "south", "west"};
 
 /*
   [Connection Functions]
@@ -40,16 +43,16 @@ void connect_WiFi() {
   Serial.print("WiFi Connected!\n IP Address: ");
   Serial.println(WiFi.localIP());
 }
-void reconnect() {
-  while(!client.connected()) {
+void mqttReconnect() {
+  while(!mqttClient.connected()) {
     Serial.print("Attempting MQTT connection...");
-    if (client.connect("ESP32Client")) {
+    if (mqttClient.connect("ESP32Client")) {
       Serial.println("Connected!");
-      client.subscribe("espRequest");
+      mqttClient.subscribe("espRequest");
     }
     else {
       Serial.print("failed, rc=");
-      Serial.print(client.state());
+      Serial.print(mqttClient.state());
       Serial.println("; Retrying in 3 seconds...");
       delay(3000);
     }
@@ -62,16 +65,32 @@ bool i2CAddrTest(uint8_t addr) {
   }
   return false;
 }
-void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-
-  char message[100];
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  char message[100] = {0};
   for (int i = 0; i < length; i++) {
     message[i] = (char)payload[i];
   }
-  lcd.print(message);
+  lcd_print(message);
+  Serial.print("MQTT Message: ");
+  Serial.println(message);
+}
+
+/*
+  [Socket Functions]
+*/
+void sendDirection(const char* dir) {
+  if (!socketClient.connected()) {
+    if (!socketClient.connect(socket_server, socket_port)) {
+      Serial.println("Socket connection failed");
+      return;
+    }
+  }
+  
+  if (socketClient.connected()) {
+    socketClient.print(dir);
+    Serial.print("Sent direction: ");
+    Serial.println(dir);
+  }
 }
 
 /*
@@ -150,17 +169,29 @@ void setup() {
   lcd.setCursor(0, 0);  // Move the cursor to row 0, column 0
   lcd.print("LCD on!");
 
+  for (int i = 0; i < 4; i++) {
+    pinMode(buttonPins[i], INPUT_PULLUP);
+  }
+
   // Connect to WiFi and Server
   connect_WiFi();
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
+  mqttClient.setServer(mqtt_server, 1883);
+  mqttClient.setCallback(mqttCallback);
   srand(time(NULL));
 }
 
 void loop() {
-  if(!client.connected()) {
+  if(!mqttClient.connected()) {
     reconnect();
   }
-  client.loop();
-  
+  mqttClient.loop();
+
+  // Handle Button Presses
+  for (int i = 0; i < 4; i++) {
+    if (digitalRead(buttonPins[i]) == LOW) {
+      sendDirection(directions[i]);
+      delay(200); // Debounce
+      while (digitalRead(buttonPins[i]) == LOW);
+    }
+  }
 }
